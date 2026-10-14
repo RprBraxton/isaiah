@@ -1,7 +1,7 @@
 "use strict";
 // Two-way cloud sync (Supabase). Optional: app works fully offline/local without signing in.
 const SB_URL="https://ewkcssbwoacakcfryyld.supabase.co";
-const SB_ANON="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImV3a2Nzc2J3b2FjYWtjZnJ5eWxkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTE5OTcxMjEsImV4cCI6MjEwNzU3MzEyMX0.djOP-rBakJdwj80BkhrgbPyKnQhymdkog7hGvIvZU7s"; // public anon key (safe in client; access is enforced by RLS + allowlist)
+const SB_ANON="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImV3a2Nzc2J3b2FjYWtjZnJ5eWxkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTE5OTcxMjEsImV4cCI6MjEwNzU3MzEyMX0.djOP-rBakJdwj80BkhrgbPyKnQhymdkog7hGvIvZU7s"; // public anon key (safe in client; access is enforced by RLS: only family members)
 const SYNC_KEY="isaiah.sync";
 const Y=Object.assign({snap:{},lastPull:null,uploaded:{},lastSync:null},JSON.parse(localStorage.getItem(SYNC_KEY)||"{}"));
 const ySave=()=>localStorage.setItem(SYNC_KEY,JSON.stringify(Y));
@@ -42,7 +42,8 @@ async function pull(){let q=sb.from("entries").select("*").order("server_ts",{as
   if(ch){localStorage.setItem(KEY,JSON.stringify(S));refreshUI()}ySave();return data.length===1000}
 function refreshUI(){if($("#sheet").classList.contains("hidden")&&typeof render==="function")render();else setTimeout(refreshUI,1500)}
 async function syncNow(){if(!sb||!session||busy)return;if(!navigator.onLine){setStatus("offline");return}
-  busy=true;setStatus("syncing");try{if(allowed===null){const {data}=await sb.from("allowed_emails").select("email");allowed=!!(data&&data.length)}
+  busy=true;setStatus("syncing");try{if(allowed===null){const {data}=await sb.from("members").select("uid");allowed=!!(data&&data.length)}
+    if(!allowed&&famCode()){allowed=await tryJoin(famCode())}
     if(!allowed){setStatus("denied");return}
     while(await pull());await push();Y.lastSync=Date.now();ySave();setStatus("synced");subscribe()}
   catch(e){lastErr=e.message||String(e);setStatus("error")}finally{busy=false}}
@@ -50,20 +51,28 @@ function subscribe(){if(chan||!session)return;chan=sb.channel("entries").on("pos
   if(await applyRow(r)){localStorage.setItem(KEY,JSON.stringify(S));ySave();refreshUI()}}).subscribe()}
 let pushT=null;window.onLocalSave=()=>{if(!session)return;clearTimeout(pushT);pushT=setTimeout(syncNow,800)};
 function setStatus(s){status=s;const c=document.getElementById("syncCard");if(c)c.innerHTML=syncCardInner()}
-const ST={en:{title:"Cloud sync",local:"Not signed in — data stays on this phone only.",syncing:"Syncing…",synced:"Synced",offline:"Offline — changes are saved and will sync later.",error:"Sync problem — will retry.",denied:"This email isn't on the family list yet.",email:"Your email",send:"Email me a sign-in link",code:"Or enter code from email",verify:"Verify",signout:"Sign out",now:"Sync now",sent:"Check your email for the sign-in link.",as:"Signed in as",help:"Sign in on both phones with an allowed email to see each other's entries."},
-es:{title:"Sincronización",local:"Sin sesión — los datos se quedan solo en este teléfono.",syncing:"Sincronizando…",synced:"Sincronizado",offline:"Sin conexión — se sincronizará después.",error:"Problema al sincronizar — se reintentará.",denied:"Este correo aún no está en la lista familiar.",email:"Su correo",send:"Enviarme un enlace para entrar",code:"O escriba el código del correo",verify:"Verificar",signout:"Cerrar sesión",now:"Sincronizar ahora",sent:"Revise su correo para el enlace.",as:"Sesión de",help:"Inicie sesión en ambos teléfonos con un correo permitido para ver los registros del otro."}};
+const ST={en:{title:"Family sync",local:"Not connected — data stays on this phone only.",syncing:"Syncing…",synced:"Synced",offline:"Offline — changes are saved and will sync later.",error:"Sync problem — will retry.",denied:"Family code not accepted.",code:"Family code",join:"Join family",leave:"Disconnect this phone",now:"Sync now",help:"Enter the family code on both phones to see each other's entries. You only need to do this once.",joining:"Connecting…",bad:"That code didn't work. Check spelling and try again.",slow:"Too many tries — please wait 15 minutes.",member:"Connected to the family"},
+es:{title:"Sincronización familiar",local:"Sin conexión — los datos se quedan solo en este teléfono.",syncing:"Sincronizando…",synced:"Sincronizado",offline:"Sin conexión — se sincronizará después.",error:"Problema al sincronizar — se reintentará.",denied:"Código familiar no aceptado.",code:"Código familiar",join:"Unirse a la familia",leave:"Desconectar este teléfono",now:"Sincronizar ahora",help:"Escriba el código familiar en ambos teléfonos para ver los registros del otro. Solo una vez.",joining:"Conectando…",bad:"Ese código no funcionó. Revise y vuelva a intentar.",slow:"Demasiados intentos — espere 15 minutos.",member:"Conectado a la familia"}};
 const st=k=>(ST[S.lang]||ST.en)[k];
 function syncCardInner(){if(!sb)return `<h2>☁️ ${st("title")}</h2><p class="mute">${st("local")}</p>`;
-  const dot={synced:"🟢",syncing:"🔄",offline:"🟡",error:"🔴",denied:"⛔",local:"⚪"}[status]||"⚪";
-  if(!session)return `<h2>☁️ ${st("title")}</h2><p>${dot} ${st("local")}</p><p class="mute small">${st("help")}</p><label>${st("email")}</label><input type="email" id="syE" autocomplete="email" inputmode="email"><button class="btn" id="sySend">${st("send")}</button><label>${st("code")}</label><div class="row"><input id="syC" inputmode="numeric" autocomplete="one-time-code" maxlength="10"><button class="btn sec" id="syV" style="flex:0 0 120px">${st("verify")}</button></div><p class="small mute" id="syMsg"></p>`;
-  return `<h2>☁️ ${st("title")}</h2><p>${dot} ${st(status)||status}${status==="synced"&&Y.lastSync?" · "+new Date(Y.lastSync).toLocaleTimeString([], {hour:"numeric",minute:"2-digit"}):""}</p>${status==="error"?`<p class="small mute">${esc(lastErr)}</p>`:""}<p class="small mute">${st("as")} ${esc(session.user.email)}</p><div class="row"><button class="btn sec" id="syNow">${st("now")}</button><button class="btn ghost" id="syOut">${st("signout")}</button></div>`}
+  const dot={synced:"🟢",syncing:"🔄",offline:"🟡",error:"🔴",denied:"⛔",local:"⚪",joining:"🔄"}[status]||"⚪";
+  if(!session||!allowed)return `<h2>☁️ ${st("title")}</h2><p>${dot} ${st(status)||st("local")}</p><p class="mute small">${st("help")}</p><label>${st("code")}</label><input id="syCode" autocapitalize="none" autocorrect="off" spellcheck="false" autocomplete="off" placeholder="word-word-word-00" value="${esc(famCode()||"")}"><button class="btn" id="syJoin">${st("join")}</button><p class="small mute" id="syMsg">${esc(joinMsg)}</p>`;
+  return `<h2>☁️ ${st("title")}</h2><p>${dot} ${st(status)||status}${status==="synced"&&Y.lastSync?" · "+new Date(Y.lastSync).toLocaleTimeString([], {hour:"numeric",minute:"2-digit"}):""}</p>${status==="error"?`<p class="small mute">${esc(lastErr)}</p>`:""}<p class="small mute">✓ ${st("member")}</p><div class="row"><button class="btn sec" id="syNow">${st("now")}</button><button class="btn ghost" id="syOut">${st("leave")}</button></div>`}
+function syncSoon(){busy?setTimeout(syncSoon,300):syncNow()}
+let joinMsg="";const FKEY="isaiah.familyCode";const famCode=()=>localStorage.getItem(FKEY);
+async function tryJoin(code){code=(code||"").trim().toLowerCase().replace(/\s+/g,"");if(!code)return false;
+  if(!session){const {data,error}=await sb.auth.signInAnonymously();if(error){joinMsg=error.message;return false}session=data.session}
+  const {data,error}=await sb.rpc("join_family",{code});
+  if(error){joinMsg=/too many/i.test(error.message)?st("slow"):error.message;return false}
+  if(!data){joinMsg=st("bad");localStorage.removeItem(FKEY);return false}
+  localStorage.setItem(FKEY,code);joinMsg="";return true}
 document.addEventListener("click",async e=>{const id=e.target.id;if(!sb)return;
-  if(id==="sySend"){const email=$("#syE").value.trim();if(!email)return;const {error}=await sb.auth.signInWithOtp({email,options:{emailRedirectTo:location.origin+location.pathname}});$("#syMsg").textContent=error?error.message:st("sent")}
-  if(id==="syV"){const {error}=await sb.auth.verifyOtp({email:$("#syE").value.trim(),token:$("#syC").value.trim(),type:"email"});if(error)$("#syMsg").textContent=error.message}
+  if(id==="syJoin"){const v=$("#syCode").value;setStatus("joining");allowed=await tryJoin(v);if(allowed)syncSoon();else setStatus("denied")}
   if(id==="syNow")syncNow();
-  if(id==="syOut"){await sb.auth.signOut();}});
+  if(id==="syOut"){try{await sb.rpc("leave_family")}catch(_){}localStorage.removeItem(FKEY);allowed=null;await sb.auth.signOut();session=null;setStatus("local")}});
 if(sb){sb.auth.onAuthStateChange((ev,s)=>{const was=session?.user?.id;session=s;if(!s){allowed=null;if(chan){sb.removeChannel(chan);chan=null}setStatus("local");return}
     if(was!==s.user.id){allowed=null;if(Y.user&&Y.user!==s.user.id){Y.snap={};Y.lastPull=null}Y.user=s.user.id;ySave();setTimeout(syncNow,0)}else setStatus(status)});
-  addEventListener("online",syncNow);addEventListener("offline",()=>setStatus("offline"));setInterval(syncNow,60000);
+  sb.auth.getSession().then(async({data})=>{if(!data.session&&famCode()&&navigator.onLine){allowed=await tryJoin(famCode());if(allowed)syncSoon()}});
+  addEventListener("online",()=>{if(!session&&famCode())tryJoin(famCode()).then(a=>{allowed=a;syncSoon()});else syncNow()});addEventListener("offline",()=>setStatus("offline"));setInterval(syncNow,60000);
   document.addEventListener("visibilitychange",()=>{if(!document.hidden)syncNow()})}
 window.isaiahSync={syncNow,get status(){return status},sb:()=>sb};
