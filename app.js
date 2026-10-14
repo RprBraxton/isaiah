@@ -7,14 +7,14 @@ const todayISO=()=>{const d=new Date();return new Date(d-d.getTimezoneOffset()*6
 const DEF={baby:{name:"Isaiah",birth:"2026-08-09",weeksEarly:0,useCorrected:false},lang:"en",theme:"auto",units:"us",ms:{},logs:[],growth:[],firsts:[],timers:{},deleted:{},lastBackup:null,weekly:{},letters:[],headerPhoto:null};
 let S=load();
 function load(){try{return Object.assign(structuredClone(DEF),JSON.parse(localStorage.getItem(KEY)||"{}"))}catch(e){return structuredClone(DEF)}}
-function save(){localStorage.setItem(KEY,JSON.stringify(S))}
+function save(){localStorage.setItem(KEY,JSON.stringify(S));window.onLocalSave&&window.onLocalSave()}
 // ---------- photos (IndexedDB) ----------
 let dbp;function db(){return dbp||(dbp=new Promise((res,rej)=>{const r=indexedDB.open("isaiah",1);r.onupgradeneeded=()=>r.result.createObjectStore("photos");r.onsuccess=()=>res(r.result);r.onerror=()=>rej(r.error)}))}
 async function pPut(k,v){const d=await db();return new Promise((res,rej)=>{const t=d.transaction("photos","readwrite");t.objectStore("photos").put(v,k);t.oncomplete=res;t.onerror=()=>rej(t.error)})}
 async function pGet(k){const d=await db();return new Promise(res=>{const r=d.transaction("photos").objectStore("photos").get(k);r.onsuccess=()=>res(r.result);r.onerror=()=>res(null)})}
 async function pAll(){const d=await db();return new Promise(res=>{const out={},r=d.transaction("photos").objectStore("photos").openCursor();r.onsuccess=()=>{const c=r.result;if(c){out[c.key]=c.value;c.continue()}else res(out)}})}
 async function pDel(k){const d=await db();d.transaction("photos","readwrite").objectStore("photos").delete(k)}
-function shrink(file,max=1000){return new Promise((res,rej)=>{const img=new Image();img.onload=()=>{const s=Math.min(1,max/Math.max(img.width,img.height));const c=document.createElement("canvas");c.width=img.width*s;c.height=img.height*s;c.getContext("2d").drawImage(img,0,0,c.width,c.height);URL.revokeObjectURL(img.src);res(c.toDataURL("image/jpeg",.82))};img.onerror=rej;img.src=URL.createObjectURL(file)})}
+function shrink(file,max=1280){return new Promise((res,rej)=>{const img=new Image();img.onload=()=>{const s=Math.min(1,max/Math.max(img.width,img.height));const c=document.createElement("canvas");c.width=img.width*s;c.height=img.height*s;c.getContext("2d").drawImage(img,0,0,c.width,c.height);URL.revokeObjectURL(img.src);res(c.toDataURL("image/jpeg",.82))};img.onerror=rej;img.src=URL.createObjectURL(file)})}
 async function hydratePhotos(){for(const el of document.querySelectorAll("img[data-pid]")){const v=await pGet(el.dataset.pid);if(v)el.src=v;else el.remove()}}
 // ---------- i18n ----------
 const T={
@@ -213,7 +213,7 @@ function settings(){V(`<section class="card"><h2>⚙️ ${t("settings")}</h2>
   <label>${t("weeksEarly")}</label><input type="number" id="sW" min="0" max="16" value="${S.baby.weeksEarly}">
   <label>${t("theme")}</label><div class="choices">${["auto","light","dark"].map(x=>`<button data-theme="${x}" style="${S.theme===x?"background:var(--acc);color:#fff":""}">${t(x)}</button>`).join("")}</div>
   <label>${t("units")}</label><div class="choices">${[["us","lb / oz / in"],["metric","kg / cm"]].map(([k,n])=>`<button data-units="${k}" style="${S.units===k?"background:var(--acc);color:#fff":""}">${n}</button>`).join("")}</div>
-  <button class="btn" id="sSave">${t("savebtn")}</button></section><p class="mute small">${S.lang==="es"?"La CDC usa la edad corregida para prematuros hasta los 2 años.":"CDC uses corrected age for babies born prematurely (typically until age 2)."}</p>`);
+  <button class="btn" id="sSave">${t("savebtn")}</button></section><section class="card" id="syncCard">${typeof syncCardInner==="function"?syncCardInner():""}</section><p class="mute small">${S.lang==="es"?"La CDC usa la edad corregida para prematuros hasta los 2 años.":"CDC uses corrected age for babies born prematurely (typically until age 2)."}</p>`);
   $("#sSave").onclick=()=>{S.baby={name:$("#sN").value.trim()||"Isaiah",birth:$("#sB").value||S.baby.birth,useCorrected:$("#sC").checked,weeksEarly:Math.max(0,+$("#sW").value||0)};localStorage.setItem(KEY+".babySet","1");selStage=null;save();render();toast(t("saved"))}}
 // ---------- sheet / toast / events ----------
 function sheet(h){$("#sheetCard").innerHTML=h;$("#sheet").classList.remove("hidden");hydratePhotos()}
