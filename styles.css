@@ -100,3 +100,6 @@ input[type=range]{padding:0;margin:12px 0;accent-color:var(--acc);border:0;backg
 @keyframes hop{0%,100%{transform:translateY(0) scale(1)}40%{transform:translateY(-16px) scale(1.06)}70%{transform:translateY(0) scale(.97)}}
 @keyframes zfloat{0%{opacity:0;transform:translate(0,8px) scale(.7)}30%{opacity:1}100%{opacity:0;transform:translate(14px,-26px) scale(1.1)}}
 @media (prefers-reduced-motion:reduce){.avs,.avs.bounce,.zzz i,.confetti i,.celebrate-av,.av-happy,.av-sleepy,.big.run{animation:none!important}.zzz i{opacity:.8}.confetti i{display:none}.avs .avimg{transition:opacity .2s}}
+
+.lastfeed{margin:0 0 10px;font-size:16px}
+.log .gap{display:inline-block;margin-top:2px}
